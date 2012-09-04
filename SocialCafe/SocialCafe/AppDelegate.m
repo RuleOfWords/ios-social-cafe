@@ -15,19 +15,37 @@
  */
 
 #import "AppDelegate.h"
-#import <FacebookSDK/FacebookSDK.h>
 #import "MenuViewController.h"
 
+NSString *const FBSessionStateChangedNotification =
+@"com.facebook.samples.SocialCafe:FBSessionStateChangedNotification";
+
+NSString *const FBMenuDataChangedNotification =
+@"com.facebook.samples.SocialCafe:FBMenuDataChangedNotification";
+
 @interface AppDelegate ()
+<MenuDataLoadDelegate>
+
 @property (strong, nonatomic) NSURL *openedURL;
+
 @end
 
 @implementation AppDelegate
 
 @synthesize window = _window;
 @synthesize openedURL = _openedURL;
+@synthesize menu = _menu;
+@synthesize user = _user;
 
 #pragma mark - Helper methods
+/*
+ * Helper method that initializes the menu items
+ */
+- (void)initMenuItems {
+    self.menu = [[Menu alloc] init];
+    self.menu.delegate = self;
+}
+
 /**
  * A function for parsing URL parameters.
  */
@@ -38,19 +56,121 @@
         NSArray *kv = [pair componentsSeparatedByString:@"="];
         if ([kv count] > 1) {
             NSString *val = [[kv objectAtIndex:1]
-                         stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+                             stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
             [params setObject:val forKey:[kv objectAtIndex:0]];
         }
     }
     return params;
 }
 
+#pragma mark - Authentication methods
+/*
+ * Callback for session changes.
+ */
+- (void)sessionStateChanged:(FBSession *)session
+                      state:(FBSessionState) state
+                      error:(NSError *)error
+{
+    switch (state) {
+        case FBSessionStateOpen:
+            if (!error) {
+                // We have a valid session
+                //NSLog(@"User session found");
+            }
+            break;
+        case FBSessionStateClosed:
+            self.user = nil;
+            break;
+        case FBSessionStateClosedLoginFailed:
+            self.user = nil;
+            [FBSession.activeSession closeAndClearTokenInformation];
+            break;
+        default:
+            break;
+    }
+    
+    [[NSNotificationCenter defaultCenter]
+     postNotificationName:FBSessionStateChangedNotification
+     object:session];
+    
+    if (error) {
+        UIAlertView *alertView = [[UIAlertView alloc]
+                                  initWithTitle:@"Error"
+                                  message:error.localizedDescription
+                                  delegate:nil
+                                  cancelButtonTitle:@"OK"
+                                  otherButtonTitles:nil];
+        [alertView show];
+    }
+}
+
+/*
+ * Opens a Facebook session and optionally shows the login UX.
+ */
+- (BOOL)openSessionWithAllowLoginUI:(BOOL)allowLoginUI {
+    // Ask for permissions for publishing, getting info about uploaded
+    // custom photos.
+    NSArray *permissions = [NSArray arrayWithObjects:
+                            @"publish_actions",
+                            @"user_photos",
+                            nil];
+    
+    return [FBSession openActiveSessionWithPermissions:permissions
+                                          allowLoginUI:allowLoginUI
+                                     completionHandler:^(FBSession *session,
+                                                         FBSessionState state,
+                                                         NSError *error) {
+                                         [self sessionStateChanged:session
+                                                             state:state
+                                                             error:error];
+                                     }];
+}
+
+/*
+ * Closes the active Facebook session
+ */
+- (void) closeSession {
+    [FBSession.activeSession closeAndClearTokenInformation];
+}
+
+#pragma mark - Personalization methods
+/*
+ * Makes a request for user data and invokes a callback
+ */
+- (void)requestUserData:(UserDataLoadedHandler)handler
+{
+    // If there is saved data, return this.
+    if (nil != self.user) {
+        if (handler) {
+            handler(self, self.user);
+        }
+    } else if (FBSession.activeSession.isOpen) {
+        [FBRequestConnection startForMeWithCompletionHandler:
+         ^(FBRequestConnection *connection, NSDictionary<FBGraphUser> *user, NSError *error) {
+             if (!error) {
+                 // Update menu user info
+                 self.menu.profileID = user.id;
+                 // Save the user data
+                 self.user = user;
+                 if (handler) {
+                     handler(self, self.user);
+                 }
+             }
+         }];
+    }
+}
+
+#pragma mark -
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
     [FBProfilePictureView class];
     [FBPlacePickerViewController class];
     [FBFriendPickerViewController class];
     // Override point for customization after application launch.
+    
+    // Initialze the beverage menu items
+    [self initMenuItems];
+    
     return YES;
 }
 
@@ -65,23 +185,6 @@
     // We need to handle URLs by passing them to FBSession in order for SSO authentication
     // to work.
     return [FBSession.activeSession handleOpenURL:url];
-}
-
-- (void)applicationWillResignActive:(UIApplication *)application
-{
-    // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
-    // Use this method to pause ongoing tasks, disable timers, and throttle down OpenGL ES frame rates. Games should use this method to pause the game.
-}
-
-- (void)applicationDidEnterBackground:(UIApplication *)application
-{
-    // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later. 
-    // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
-}
-
-- (void)applicationWillEnterForeground:(UIApplication *)application
-{
-    // Called as part of the transition from the background to the inactive state; here you can undo many of the changes made on entering the background.
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application
@@ -116,14 +219,23 @@
             // The menu view controller will handle the redirect
             [navController popToRootViewControllerAnimated:NO];
         } else {
-            [menuViewController populateUserDetails];
+            [menuViewController goToSelectedMenu];
         }
     }
 }
 
 - (void)applicationWillTerminate:(UIApplication *)application
 {
-    // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+    // if the app is going away, we close the session object
+    [FBSession.activeSession close];
+}
+
+#pragma mark - Menu Data Load Delegate
+- (void)menu:(Menu *)menu didLoadData:(NSDictionary *)results index:(NSUInteger)index
+{
+    [[NSNotificationCenter defaultCenter]
+     postNotificationName:FBMenuDataChangedNotification
+     object:results];
 }
 
 @end

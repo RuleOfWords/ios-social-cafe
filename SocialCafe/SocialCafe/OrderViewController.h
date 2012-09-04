@@ -20,7 +20,6 @@
 typedef void(^SelectItemCallback)(id sender, id selectedItems);
 
 @interface OrderViewController : UIViewController
-@property (strong, nonatomic) NSDictionary *menuItem;
-@property (strong, nonatomic) NSDictionary<FBGraphUser> *user;
+@property (assign, nonatomic) NSUInteger selectedMenuIndex;
 
 @end

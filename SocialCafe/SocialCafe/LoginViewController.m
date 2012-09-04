@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#import <FacebookSDK/FacebookSDK.h>
 #import "LoginViewController.h"
+#import "AppDelegate.h"
 #import "MenuViewController.h"
 
 @interface LoginViewController ()
@@ -26,48 +26,18 @@
 
 #pragma mark - Helper methods
 /*
- * This is the session state callback handler.
+ * Configure the logged in versus logged out UX
  */
-- (void) sessionStateChanged:(FBSession *)session state:(FBSessionState)state error:(NSError *)error {
-    switch (state) {
-        case FBSessionStateOpen: {
-            // If the session is open, cache friend data
-            FBCacheDescriptor *cacheDescriptor = [FBFriendPickerViewController cacheDescriptor];
-            [cacheDescriptor prefetchAndCacheForSession:session];
-            
-            // Go to the menu page
-            [self performSegueWithIdentifier:@"SegueToMenu" sender:self];
-            break;
-        }
-        case FBSessionStateClosed:
-        case FBSessionStateClosedLoginFailed: {
-            break;
-        }
-        default:
-            break;
+- (void)sessionStateChanged:(NSNotification*)notification {
+    if (FBSession.activeSession.isOpen) {
+        // If the session is open, cache friend data
+        FBCacheDescriptor *cacheDescriptor = [FBFriendPickerViewController cacheDescriptor];
+        [cacheDescriptor prefetchAndCacheForSession:FBSession.activeSession];
+        
+        // Go to the menu page
+        [self performSegueWithIdentifier:@"SegueToMenu" sender:self];
     }
 }
-
-/*
- * This method opens the user session
- */
-- (void)openSession
-{
-    // Ask for permissions for publishing, getting info about uploaded
-    // custom photos.
-    NSArray *permissions = [NSArray arrayWithObjects:
-                            @"publish_actions",
-                            @"user_photos",
-                            nil];
-    [FBSession openActiveSessionWithPermissions:permissions
-                                   allowLoginUI:YES
-                              completionHandler:^(FBSession *session,
-                                                  FBSessionState state,
-                                                  NSError *error) {
-        [self sessionStateChanged:session state:state error:error];
-    }];
-}
-
 
 - (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
     if ([[segue identifier] isEqual:@"SegueToMenu"]) {
@@ -80,12 +50,21 @@
 {
     [super viewDidLoad];
 	// Do any additional setup after loading the view, typically from a nib.
+    
+    // Register for notifications on FB session state changes
+    [[NSNotificationCenter defaultCenter]
+     addObserver:self
+     selector:@selector(sessionStateChanged:)
+     name:FBSessionStateChangedNotification
+     object:nil];
 }
 
 - (void)viewDidUnload
 {
     [super viewDidUnload];
     // Release any retained subviews of the main view.
+    
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 
@@ -96,8 +75,9 @@
 
 #pragma mark - Action methods
 - (IBAction)loginButtonClicked:(id)sender {
-    // Login the user
-    [self openSession];
+    AppDelegate *appDelegate =
+    [[UIApplication sharedApplication] delegate];
+    [appDelegate openSessionWithAllowLoginUI:YES];
 }
 
 @end

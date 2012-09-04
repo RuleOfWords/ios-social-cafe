@@ -14,26 +14,23 @@
  * limitations under the License.
  */
 
-#import <FacebookSDK/FacebookSDK.h>
 #import "MenuViewController.h"
+#import "AppDelegate.h"
 #import "OrderViewController.h"
-#import "Menu.h"
 
 @interface MenuViewController () 
 <UITableViewDataSource,
-UITableViewDelegate,
-MenuDataLoadDelegate>
+UITableViewDelegate>
 
 @property (strong, nonatomic) IBOutlet FBProfilePictureView *userProfilePictureView;
 @property (strong, nonatomic) IBOutlet UILabel *userNameLabel;
 @property (weak, nonatomic) IBOutlet UITableView *menuTableView;
-@property (strong, nonatomic) Menu *menu;
 @property (strong, nonatomic) NSDictionary<FBGraphUser> *user;
 @property (strong, nonatomic) NSString *menuLink;
 @property (assign, nonatomic) NSUInteger selectedMenuIndex;
 
-- (void)initMenuItems;
-- (void)goToSelectedMenu;
+- (void)sessionStateChanged:(NSNotification*)notification;
+- (void)populateUserDetails;
 
 @end
 
@@ -41,43 +38,41 @@ MenuDataLoadDelegate>
 @synthesize userProfilePictureView;
 @synthesize userNameLabel;
 @synthesize menuTableView;
-@synthesize menu = _menu;
 @synthesize user = _user;
 @synthesize menuLink = _menuLink;
 @synthesize selectedMenuIndex = _selectedMenuIndex;
 
 #pragma mark - Helper methods
 /*
- * This method personalizes the user's experience by getting the user's
- * name and profile picture.
+ * Configure the logged in versus logged out UX
  */
-- (void)populateUserDetails {
+- (void)sessionStateChanged:(NSNotification*)notification {
     if (FBSession.activeSession.isOpen) {
-        [FBRequestConnection startForMeWithCompletionHandler:
-         ^(FBRequestConnection *connection, NSDictionary<FBGraphUser> *user, NSError *error) {
-             if (!error) {
-                 self.userNameLabel.text = user.name;
-                 self.userProfilePictureView.profileID = [user objectForKey:@"id"];
-                 self.menu.profileID = [user objectForKey:@"id"];
-                 self.user = user;
-                 
-                 // If a deep link, go to the seleceted menu
-                 if (self.menuLink) {
-                     [self goToSelectedMenu];
-                 }
-             }
-         }];   
+        // If a deep link, go to the seleceted menu
+        if (self.menuLink) {
+            [self goToSelectedMenu];
+        } else {
+            [self populateUserDetails];
+        }
+    } else {
+        [self performSegueWithIdentifier:@"SegueToLogin" sender:self];
     }
 }
 
 /*
- * This method initializes the menu items
+ * Update the table view
  */
-- (void)initMenuItems {
-    self.menu = [[Menu alloc] init];
-    self.menu.delegate = self;
+- (void)menuDataChanged:(NSNotification*)notification {
+    [self.menuTableView reloadData];
 }
 
+- (void)populateUserDetails {
+    AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
+    [appDelegate requestUserData:^(id sender, id<FBGraphUser> user) {
+        self.userNameLabel.text = user.name;
+        self.userProfilePictureView.profileID = [user objectForKey:@"id"];
+    }];
+}
 
 /*
  * Set up the deep link URL
@@ -91,13 +86,14 @@ MenuDataLoadDelegate>
  */
 
 - (void) goToSelectedMenu {
+    AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
     NSURL *menuLinkURL = [NSURL URLWithString:self.menuLink];
 
     // Find the menu that matches the deep link URL
     NSInteger menuIndex = -1;
-    for (NSInteger i = 0; i < [self.menu.items count]; i++) {
+    for (NSInteger i = 0; i < [appDelegate.menu.items count]; i++) {
         NSURL *checkURL = [NSURL URLWithString:
-                           [[self.menu.items objectAtIndex:i]
+                           [[appDelegate.menu.items objectAtIndex:i]
                             objectForKey:@"url"]];
         if ([[menuLinkURL path] isEqualToString:[checkURL path]]) {
             menuIndex = i;
@@ -108,7 +104,8 @@ MenuDataLoadDelegate>
     // If a menu match found go to the order view controller
     if (menuIndex >= 0) {
         self.selectedMenuIndex = menuIndex;
-        [self performSegueWithIdentifier:@"SegueToOrder" sender:self];
+        // Use the custom segue that does not have animation
+        [self performSegueWithIdentifier:@"SegueToOrderLink" sender:self];
     }
 }
 
@@ -117,7 +114,20 @@ MenuDataLoadDelegate>
 {
     [super viewDidLoad];
 	// Do any additional setup after loading the view.
-    [self initMenuItems];
+    
+    // Register for notifications on FB session state changes
+    [[NSNotificationCenter defaultCenter]
+     addObserver:self
+     selector:@selector(sessionStateChanged:)
+     name:FBSessionStateChangedNotification
+     object:nil];
+    
+    // Register for notifications on menu data changes
+    [[NSNotificationCenter defaultCenter]
+     addObserver:self
+     selector:@selector(menuDataChanged:)
+     name:FBMenuDataChangedNotification
+     object:nil];
 }
 
 - (void)viewDidUnload
@@ -127,48 +137,39 @@ MenuDataLoadDelegate>
     [self setMenuTableView:nil];
     [super viewDidUnload];
     // Release any retained subviews of the main view.
-}
-
-- (void)viewDidAppear:(BOOL)animated
-{
-    [super viewDidAppear:animated];
-
-    // Present login modal if necessary after the view has been
-    // displayed, not in viewWillAppear: so as to allow display
-    // stack to "unwind"
-    if (FBSession.activeSession.isOpen ||
-        FBSession.activeSession.state == FBSessionStateCreatedTokenLoaded ||
-        FBSession.activeSession.state == FBSessionStateCreatedOpening) {
-    } else {
-        [self performSegueWithIdentifier:@"SegueToLogin" sender:self];
-    }
+    
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     
-    if (FBSession.activeSession.state == FBSessionStateOpen) {
-        // If the user's session is active personalize
-        // the experience
+    if (FBSession.activeSession.isOpen && (nil == self.menuLink)) {
+        // If the user's session is active, personalize, but
+        // only if this is not deep linking into the order view.
         [self populateUserDetails];
     } else if (FBSession.activeSession.state == FBSessionStateCreatedTokenLoaded) {
-        // If the session info is in cache, open the session but do not display
-        // any login UX.
-        NSArray *permissions = [NSArray arrayWithObjects:
-                                @"publish_actions",
-                                @"user_photos",
-                                nil];
-        [FBSession openActiveSessionWithPermissions:permissions
-                                       allowLoginUI:NO
-                                  completionHandler:^(FBSession *session,
-                                                      FBSessionState state,
-                                                      NSError *error) {
-            if (!error) {
-                // If the user's session is active personalize
-                // the experience
-                [self populateUserDetails];
-            }
-        }];
+        // Check the session for a cached token to show the proper authenticated
+        // UI. However, since this is not user intitiated, do not show the login UX.
+        AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
+        [appDelegate openSessionWithAllowLoginUI:NO];
+    }
+}
+
+- (void)viewDidAppear:(BOOL)animated
+{
+    [super viewDidAppear:animated];
+    
+    // Present login modal if necessary after the view has been
+    // displayed, not in viewWillAppear: so as to allow display
+    // stack to "unwind"
+    if (FBSession.activeSession.isOpen && self.menuLink) {
+        [self goToSelectedMenu];
+    } else if (FBSession.activeSession.isOpen ||
+        FBSession.activeSession.state == FBSessionStateCreatedTokenLoaded ||
+        FBSession.activeSession.state == FBSessionStateCreatedOpening) {
+    } else {
+        [self performSegueWithIdentifier:@"SegueToLogin" sender:self];
     }
 }
 
@@ -188,11 +189,13 @@ MenuDataLoadDelegate>
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return [self.menu.items count];
+    AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
+    return [appDelegate.menu.items count];
 }
 
 // Customize the appearance of table view cells.
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
     static NSString *CellIdentifier = @"Cell";
     UITableViewCell *cell = [tableView
                              dequeueReusableCellWithIdentifier:CellIdentifier];
@@ -200,19 +203,19 @@ MenuDataLoadDelegate>
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
                                       reuseIdentifier:CellIdentifier];
     }
-    cell.imageView.image = [UIImage imageNamed:[[self.menu.items objectAtIndex:indexPath.row]
+    cell.imageView.image = [UIImage imageNamed:[[appDelegate.menu.items objectAtIndex:indexPath.row]
                                                 objectForKey:@"picture"]];
-    cell.textLabel.text = [[self.menu.items objectAtIndex:indexPath.row] objectForKey:@"title"];
+    cell.textLabel.text = [[appDelegate.menu.items objectAtIndex:indexPath.row] objectForKey:@"title"];
     cell.textLabel.font = [UIFont fontWithName:@"Helvetica" size:20.0];
-    if ([[self.menu.items objectAtIndex:indexPath.row] objectForKey:@"likeCount"] &&
-        [[self.menu.items objectAtIndex:indexPath.row] objectForKey:@"orderCount"]) {
+    if ([[appDelegate.menu.items objectAtIndex:indexPath.row] objectForKey:@"likeCount"] &&
+        [[appDelegate.menu.items objectAtIndex:indexPath.row] objectForKey:@"orderCount"]) {
         int likePercentage =
-        ([[[self.menu.items objectAtIndex:indexPath.row] objectForKey:@"likeCount"] doubleValue] /
-         [[[self.menu.items objectAtIndex:indexPath.row] objectForKey:@"orderCount"] doubleValue]) * 100.0;
+        ([[[appDelegate.menu.items objectAtIndex:indexPath.row] objectForKey:@"likeCount"] doubleValue] /
+         [[[appDelegate.menu.items objectAtIndex:indexPath.row] objectForKey:@"orderCount"] doubleValue]) * 100.0;
         cell.detailTextLabel.numberOfLines = 2;
         cell.detailTextLabel.text =
             [NSString stringWithFormat:@"%@ others enjoyed this.\n%d%% of orders enjoyed this.",
-                                     [[self.menu.items
+                                     [[appDelegate.menu.items
                                        objectAtIndex:indexPath.row]
                                       objectForKey:@"likeCount"],
                                      likePercentage];
@@ -228,28 +231,19 @@ MenuDataLoadDelegate>
 
 - (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender
 {
-    if ([segue.identifier isEqualToString:@"SegueToOrder"]) {
+    if ([segue.identifier isEqualToString:@"SegueToOrder"] ||
+        [segue.identifier isEqualToString:@"SegueToOrderLink"]) {
         // Go to the selected menu
         OrderViewController *ovc = (OrderViewController *)segue.destinationViewController;
-        ovc.menuItem = [self.menu.items objectAtIndex:self.selectedMenuIndex];
-        ovc.user = self.user;
+        ovc.selectedMenuIndex = self.selectedMenuIndex;
         [self.menuTableView deselectRowAtIndexPath:[self.menuTableView indexPathForSelectedRow] animated:NO];
     }
 }
 
-#pragma mark - Menu Data Load Delegate
-/*
- * This reloads the menu if there are any changes to the menu data
- */
-- (void)menu:(Menu *)menu didLoadData:(NSDictionary *)results index:(NSUInteger)index
-{
-    [self.menuTableView reloadData];
-}
-
 #pragma mark - Action methods
 - (IBAction)logoutButtonClicked:(id)sender {
-    [FBSession.activeSession closeAndClearTokenInformation];
-    [self performSegueWithIdentifier:@"SegueToLogin" sender:self];
+    AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
+    [appDelegate closeSession];
 }
 
 

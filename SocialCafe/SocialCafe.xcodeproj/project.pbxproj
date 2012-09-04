@@ -21,6 +21,7 @@
 		304BB23F15C832F8001BCAAA /* order.png in Resources */ = {isa = PBXBuildFile; fileRef = 304BB23D15C832F8001BCAAA /* order.png */; };
 		3064F3D415EADB7700DE6916 /* FacebookSDK.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3064F3D315EADB7700DE6916 /* FacebookSDK.framework */; };
 		3064F3D715EADB8400DE6916 /* FacebookSDKResources.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 3064F3D615EADB8400DE6916 /* FacebookSDKResources.bundle */; };
+		306A765215F5C012005C161D /* OrderLinkSegue.m in Sources */ = {isa = PBXBuildFile; fileRef = 306A765115F5C012005C161D /* OrderLinkSegue.m */; };
 		306FBF0415C1FFD500CFE1D8 /* Menu.m in Sources */ = {isa = PBXBuildFile; fileRef = 306FBF0315C1FFD500CFE1D8 /* Menu.m */; };
 		306FBF1215C2B40900CFE1D8 /* action-photo.png in Resources */ = {isa = PBXBuildFile; fileRef = 306FBF1115C2B40900CFE1D8 /* action-photo.png */; };
 		3083270C15C83D1400703865 /* ConfirmationViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 3083270B15C83D1400703865 /* ConfirmationViewController.m */; };
@@ -73,6 +74,8 @@
 		304BB23D15C832F8001BCAAA /* order.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = order.png; sourceTree = "<group>"; };
 		3064F3D315EADB7700DE6916 /* FacebookSDK.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FacebookSDK.framework; path = ../../../../../Documents/FacebookSDK/FacebookSDK.framework; sourceTree = "<group>"; };
 		3064F3D615EADB8400DE6916 /* FacebookSDKResources.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; name = FacebookSDKResources.bundle; path = ../../../../../Documents/FacebookSDK/FacebookSDK.framework/Versions/A/Resources/FacebookSDKResources.bundle; sourceTree = "<group>"; };
+		306A765015F5C012005C161D /* OrderLinkSegue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = OrderLinkSegue.h; sourceTree = "<group>"; };
+		306A765115F5C012005C161D /* OrderLinkSegue.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = OrderLinkSegue.m; sourceTree = "<group>"; };
 		306FBF0215C1FFD500CFE1D8 /* Menu.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = Menu.h; sourceTree = "<group>"; };
 		306FBF0315C1FFD500CFE1D8 /* Menu.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = Menu.m; sourceTree = "<group>"; };
 		306FBF1115C2B40900CFE1D8 /* action-photo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "action-photo.png"; sourceTree = "<group>"; };
@@ -177,6 +180,8 @@
 				3083270B15C83D1400703865 /* ConfirmationViewController.m */,
 				30A8191B15E48E0E003E3F5A /* PhotoViewController.h */,
 				30A8191C15E48E0E003E3F5A /* PhotoViewController.m */,
+				306A765015F5C012005C161D /* OrderLinkSegue.h */,
+				306A765115F5C012005C161D /* OrderLinkSegue.m */,
 				30DA207315B4AA930014FF4A /* SCProtocols.h */,
 				306FBF0215C1FFD500CFE1D8 /* Menu.h */,
 				306FBF0315C1FFD500CFE1D8 /* Menu.m */,
@@ -327,6 +332,7 @@
 				306FBF0415C1FFD500CFE1D8 /* Menu.m in Sources */,
 				3083270C15C83D1400703865 /* ConfirmationViewController.m in Sources */,
 				30A8191D15E48E0E003E3F5A /* PhotoViewController.m in Sources */,
+				306A765215F5C012005C161D /* OrderLinkSegue.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

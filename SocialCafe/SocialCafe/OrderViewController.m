@@ -15,7 +15,7 @@
  */
 
 #import "OrderViewController.h"
-#import <FacebookSDK/FacebookSDK.h>
+#import "AppDelegate.h"
 #import "SCProtocols.h"
 #import "FriendViewContoller.h"
 #import "PlaceViewController.h"
@@ -49,11 +49,15 @@ UIImagePickerControllerDelegate>
 @property (strong, nonatomic) UIImage *selectedPhoto;
 @property (weak, nonatomic) IBOutlet UIActivityIndicatorView *activityIndicator;
 
+- (void)sessionStateChanged:(NSNotification*)notification;
 - (void)updateSummary;
+- (void)populateUserDetails;
+- (void) orderSummary:(NSString *)summary;
 
 @end
 
 @implementation OrderViewController
+@synthesize selectedMenuIndex = _selectedMenuIndex;
 @synthesize userProfilePictureView = _userProfilePictureView;
 @synthesize orderSummaryLabel = _orderSummaryLabel;
 @synthesize orderMessageTextView = _orderMessageTextView;
@@ -64,8 +68,6 @@ UIImagePickerControllerDelegate>
 @synthesize selectedPlace = _selectedPlace;
 @synthesize selectedFriends = _selectedFriends;
 @synthesize locationManager = _locationManager;
-@synthesize menuItem =_menuItem;
-@synthesize user = _user;
 @synthesize initialOrderSummary = _initialOrderSummary;
 @synthesize enteredMessage = _enteredMessage;
 @synthesize imagePicker = _imagePicker;
@@ -73,31 +75,64 @@ UIImagePickerControllerDelegate>
 @synthesize selectedPhoto = _selectedPhoto;
 @synthesize activityIndicator = _activityIndicator;
 
+#pragma mark - Helper methods
+/*
+ * Configure the logged in versus logged out UX
+ */
+- (void)sessionStateChanged:(NSNotification*)notification {
+    if (FBSession.activeSession.isOpen) {
+        [self populateUserDetails];
+    } else {
+        // Go to the root controller that handles login UX
+        [self.navigationController popToRootViewControllerAnimated:YES];
+    }
+}
+
+/*
+ * Personalize the view with user info
+ */
+- (void)populateUserDetails {
+    AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
+    [appDelegate requestUserData:^(id sender, id<FBGraphUser> user) {
+        self.userProfilePictureView.profileID = user.id;
+        [self orderSummary:[NSString stringWithFormat:@"%@ ordered %@",
+                            user.name,
+                            [[appDelegate.menu.items objectAtIndex:self.selectedMenuIndex]
+                             objectForKey:@"title"]]];
+    }];
+}
+
+/*
+ * Method to set the order summary info
+ */
+- (void) orderSummary:(NSString *)summary {
+    self.initialOrderSummary = summary;
+    self.orderSummaryLabel.text =  [NSString stringWithFormat:@"%@.", self.initialOrderSummary];
+    [self.orderSummaryLabel sizeToFit];
+}
+
 #pragma mark - View life cycle
 - (void)viewDidLoad
 {
     [super viewDidLoad];
 	// Do any additional setup after loading the view.
-    if (self.menuItem) {
-        self.orderTitleLabel.text = [self.menuItem objectForKey:@"title"];
-        self.orderImageView.image = [UIImage imageNamed:[self.menuItem objectForKey:@"picture"]];
-        self.orderLikesLabel.text =
-            [NSString stringWithFormat:@"%@ others enjoyed this.",
-             [self.menuItem objectForKey:@"likeCount"]];
-    }
-    if (self.user.id) {
-        self.userProfilePictureView.profileID = self.user.id;
-    }
-    if (self.user.name) {
-        self.initialOrderSummary = [NSString stringWithFormat:@"%@ ordered %@",
-                                       self.user.name,
-                                       [self.menuItem objectForKey:@"title"]];
-    } else {
-        self.initialOrderSummary = [NSString stringWithFormat:@"Ordered %@",
-                                       [self.menuItem objectForKey:@"title"]];
-    }
-    self.orderSummaryLabel.text =  [NSString stringWithFormat:@"%@.", self.initialOrderSummary];
-    [self.orderSummaryLabel sizeToFit];
+    
+    // Register for notifications on FB session state changes
+    [[NSNotificationCenter defaultCenter]
+     addObserver:self
+     selector:@selector(sessionStateChanged:)
+     name:FBSessionStateChangedNotification
+     object:nil];
+    
+    AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
+    NSDictionary *menuItem = [appDelegate.menu.items objectAtIndex:self.selectedMenuIndex];
+    self.orderTitleLabel.text = [menuItem objectForKey:@"title"];
+    self.orderImageView.image = [UIImage imageNamed:[menuItem objectForKey:@"picture"]];
+    self.orderLikesLabel.text =
+    [NSString stringWithFormat:@"%@ others enjoyed this.",
+     [menuItem objectForKey:@"likeCount"]];
+    [self orderSummary:[NSString stringWithFormat:@"Ordered %@",
+                        [menuItem objectForKey:@"title"]]];
     
     // Get the CLLocationManager going.
     self.locationManager = [[CLLocationManager alloc] init];
@@ -126,6 +161,16 @@ UIImagePickerControllerDelegate>
     // Release any retained subviews of the main view.
     self.imagePicker = nil;
     self.popover = nil;
+    
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+-(void)viewWillAppear:(BOOL)animated{
+    [super viewWillAppear:animated];
+    
+    if (FBSession.activeSession.isOpen) {
+        [self populateUserDetails];
+    }
 }
 
 - (void)dealloc {
@@ -144,9 +189,11 @@ UIImagePickerControllerDelegate>
  */
 - (void) publishMenuSelection:(NSString *)photoURL {
     if (FBSession.activeSession.isOpen) {
+        AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
         // Get the OG object representing the drink
         id<SCOGBeverage> beverage = (id<SCOGBeverage>)[FBGraphObject graphObject];
-        beverage.url = [self.menuItem objectForKey:@"url"];
+        beverage.url = [[appDelegate.menu.items objectAtIndex:self.selectedMenuIndex]
+                        objectForKey:@"url"];
         
         // Set up the OG action parameters
         id<SCOGOrderBeverageAction> action = (id<SCOGOrderBeverageAction>)[FBGraphObject graphObject];
@@ -312,12 +359,14 @@ UIImagePickerControllerDelegate>
         [fpvc loadData];
     } else if ([segue.identifier isEqualToString:@"SegueToConfirmation"]) {
         // This sets up the order confirmation controller
+        AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
+        NSDictionary *menuItem = [appDelegate.menu.items objectAtIndex:self.selectedMenuIndex];
         NSMutableDictionary *orderData =
                 [[NSMutableDictionary alloc] initWithObjectsAndKeys:
-                     [self.menuItem objectForKey:@"title"], @"title",
-                     [self.menuItem objectForKey:@"likeCount"], @"likeCount",
+                     [menuItem objectForKey:@"title"], @"title",
+                     [menuItem objectForKey:@"likeCount"], @"likeCount",
                      self.orderSummaryLabel.text, @"summary",
-                     [self.menuItem objectForKey:@"url"], @"url",
+                     [menuItem objectForKey:@"url"], @"url",
                      nil];
         if (self.selectedPlace) {
             [orderData setValue:self.selectedPlace.id forKey:@"placeId"];
@@ -330,7 +379,7 @@ UIImagePickerControllerDelegate>
         } else {
             [orderData setValue:
              [UIImage imageNamed:
-              [self.menuItem objectForKey:@"picture"]] forKey:@"picture"];
+              [menuItem objectForKey:@"picture"]] forKey:@"picture"];
         }
         ConfirmationViewController *cvc = (ConfirmationViewController *) segue.destinationViewController;
         cvc.order = orderData;
