@@ -108,14 +108,13 @@ NSString *const FBMenuDataChangedNotification =
  * Opens a Facebook session and optionally shows the login UX.
  */
 - (BOOL)openSessionWithAllowLoginUI:(BOOL)allowLoginUI {
-    // Ask for permissions for publishing, getting info about uploaded
+    // Ask for permissions for getting info about uploaded
     // custom photos.
     NSArray *permissions = [NSArray arrayWithObjects:
-                            @"publish_actions",
                             @"user_photos",
                             nil];
     
-    return [FBSession openActiveSessionWithPermissions:permissions
+    return [FBSession openActiveSessionWithReadPermissions:permissions
                                           allowLoginUI:allowLoginUI
                                      completionHandler:^(FBSession *session,
                                                          FBSessionState state,
@@ -190,7 +189,7 @@ NSString *const FBMenuDataChangedNotification =
 - (void)applicationDidBecomeActive:(UIApplication *)application
 {
     if (FBSession.activeSession.state == FBSessionStateCreatedOpening) {
-        [FBSession.activeSession close]; // so we close our session and start over
+        //[FBSession.activeSession close]; // so we close our session and start over
     }
     
     // Check for an incoming deep link and set the info in the Menu View Controller

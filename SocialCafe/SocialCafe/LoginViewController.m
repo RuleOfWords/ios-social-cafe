@@ -34,14 +34,9 @@
         FBCacheDescriptor *cacheDescriptor = [FBFriendPickerViewController cacheDescriptor];
         [cacheDescriptor prefetchAndCacheForSession:FBSession.activeSession];
         
-        // Go to the menu page
-        [self performSegueWithIdentifier:@"SegueToMenu" sender:self];
-    }
-}
-
-- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
-    if ([[segue identifier] isEqual:@"SegueToMenu"]) {
-        [self.presentingViewController dismissModalViewControllerAnimated:NO];
+        // Go to the menu page by dismissing the modal view controller
+        // instead of using segues.
+        [self.presentingViewController dismissModalViewControllerAnimated:YES];
     }
 }
 

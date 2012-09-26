@@ -99,6 +99,8 @@ UIImagePickerControllerDelegate>
                             user.name,
                             [[appDelegate.menu.items objectAtIndex:self.selectedMenuIndex]
                              objectForKey:@"title"]]];
+        // Update for any current place/friend info
+        [self updateSummary];
     }];
 }
 
@@ -188,7 +190,21 @@ UIImagePickerControllerDelegate>
  * This method publishes the order action to the user's timeline.
  */
 - (void) publishMenuSelection:(NSString *)photoURL {
-    if (FBSession.activeSession.isOpen) {
+    // First check for publish permissions, if it is not available
+    // for this device ask for it.
+    if ([FBSession.activeSession.permissions
+         indexOfObject:@"publish_actions"] == NSNotFound) {
+        
+        [FBSession.activeSession
+         reauthorizeWithPublishPermissions:[NSArray arrayWithObject:@"publish_actions"]
+         defaultAudience:FBSessionDefaultAudienceFriends
+         completionHandler:^(FBSession *session, NSError *error) {
+             if (!error) {
+                 // Call this method again, assuming we now have the permission.
+                 [self publishMenuSelection:photoURL];
+             }
+         }];
+    } else {
         AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
         // Get the OG object representing the drink
         id<SCOGBeverage> beverage = (id<SCOGBeverage>)[FBGraphObject graphObject];
