@@ -195,6 +195,9 @@ NSString *const FBMenuDataChangedNotification =
     // Check for an incoming deep link and set the info in the Menu View Controller
     // Process the saved URL
     NSString *query = [self.openedURL fragment];
+    if (!query) {
+        query = [self.openedURL query];
+    }
     NSDictionary *params = [self parseURLParams:query];
     // Check if target URL exists
     if ([params valueForKey:@"target_url"]) {
