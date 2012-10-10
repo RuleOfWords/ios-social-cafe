@@ -188,9 +188,7 @@ NSString *const FBMenuDataChangedNotification =
 
 - (void)applicationDidBecomeActive:(UIApplication *)application
 {
-    if (FBSession.activeSession.state == FBSessionStateCreatedOpening) {
-        //[FBSession.activeSession close]; // so we close our session and start over
-    }
+    [FBSession.activeSession handleDidBecomeActive];
     
     // Check for an incoming deep link and set the info in the Menu View Controller
     // Process the saved URL
