@@ -16,6 +16,7 @@
 
 #import "AppDelegate.h"
 #import "MenuViewController.h"
+#import <FacebookSDK/FBSessionTokenCachingStrategy.h>
 
 NSString *const FBSessionStateChangedNotification =
 @"com.facebook.samples.SocialCafe:FBSessionStateChangedNotification";
@@ -61,6 +62,62 @@ NSString *const FBMenuDataChangedNotification =
         }
     }
     return params;
+}
+
+/*
+ * A function to get the access token info and save
+ * it in the cache, useful for deep linking support
+ * in cases where the session is not open.
+ */
+- (void) handleOpenURLPre:(NSURL *) url
+{
+    // Parse the URL
+    NSString *query = [url fragment];
+    if (!query) {
+        query = [self.openedURL query];
+    }
+    NSDictionary *params = [self parseURLParams:query];
+    // Look for a valid access token
+    if ([params objectForKey:@"access_token"]) {
+        NSString *accessToken = [params objectForKey:@"access_token"];
+        NSString *expires_in = [params objectForKey:@"expires_in"];
+        // Determine the expiration data
+        NSDate *expirationDate = nil;
+        if (expires_in != nil) {
+            int expValue = [expires_in intValue];
+            if (expValue != 0) {
+                expirationDate = [NSDate dateWithTimeIntervalSinceNow:expValue];
+            }
+        }
+        if (!expirationDate) {
+            expirationDate = [NSDate distantFuture];
+        }
+        NSDate *nowDate = [NSDate date];
+        // Check expiration date later than now
+        if (NSOrderedDescending == [expirationDate compare:nowDate]) {
+            // Cache the token
+            NSDictionary *tokenInfo = [NSDictionary dictionaryWithObjectsAndKeys:
+                                       accessToken, FBTokenInformationTokenKey,
+                                       expirationDate, FBTokenInformationExpirationDateKey,
+                                       nowDate, FBTokenInformationRefreshDateKey,
+                                       nil];
+            FBSessionTokenCachingStrategy *tokenCachingStrategy = [FBSessionTokenCachingStrategy defaultInstance];
+            [tokenCachingStrategy cacheTokenInformation:tokenInfo];
+            // Now open the session and the cached token should
+            // be picked up, open with nil permissions because
+            // what you send is checked against any cached permissions
+            // to determine token validity.
+            [FBSession openActiveSessionWithReadPermissions:nil
+                                               allowLoginUI:NO
+                                          completionHandler:^(FBSession *session,
+                                                              FBSessionState state,
+                                                              NSError *error) {
+                                              [self sessionStateChanged:session
+                                                                  state:state
+                                                                  error:error];
+                                          }];
+        }
+    }
 }
 
 #pragma mark - Authentication methods
@@ -181,6 +238,12 @@ NSString *const FBMenuDataChangedNotification =
     // Save the incoming URL to test deep links later.
     self.openedURL = url;
     
+    // Work around for app link from FB with valid info. If the
+    // session is closed, set the valid info (if any) in the cache
+    if ((FBSession.activeSession.state == FBSessionStateCreated) ||
+        (FBSession.activeSession.state == FBSessionStateClosed)){
+        [self handleOpenURLPre:url];
+    }
     // We need to handle URLs by passing them to FBSession in order for SSO authentication
     // to work.
     return [FBSession.activeSession handleOpenURL:url];
@@ -222,6 +285,7 @@ NSString *const FBMenuDataChangedNotification =
             [menuViewController goToSelectedMenu];
         }
     }
+    self.openedURL = nil;
 }
 
 - (void)applicationWillTerminate:(UIApplication *)application

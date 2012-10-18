@@ -89,6 +89,17 @@ UIImagePickerControllerDelegate>
 }
 
 /*
+ * Update the view info that depends on the menu
+ */
+- (void)menuDataChanged:(NSNotification*)notification {
+    AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
+    NSDictionary *menuItem = [appDelegate.menu.items objectAtIndex:self.selectedMenuIndex];
+    self.orderLikesLabel.text =
+    [NSString stringWithFormat:@"%@ others enjoyed this.",
+     [menuItem objectForKey:@"likeCount"]];
+}
+
+/*
  * Personalize the view with user info
  */
 - (void)populateUserDetails {
@@ -124,6 +135,13 @@ UIImagePickerControllerDelegate>
      addObserver:self
      selector:@selector(sessionStateChanged:)
      name:FBSessionStateChangedNotification
+     object:nil];
+    
+    // Register for notifications on menu data changes
+    [[NSNotificationCenter defaultCenter]
+     addObserver:self
+     selector:@selector(menuDataChanged:)
+     name:FBMenuDataChangedNotification
      object:nil];
     
     AppDelegate *appDelegate = [[UIApplication sharedApplication] delegate];
